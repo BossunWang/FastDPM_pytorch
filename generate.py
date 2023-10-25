@@ -118,8 +118,10 @@ def get_VAR_noise(S, schedule='linear'):
     target = np.prod(1 - np.linspace(diffusion_config["beta_0"], diffusion_config["beta_T"], diffusion_config["T"]))
 
     if schedule == 'linear':
-        g = lambda x: np.linspace(diffusion_config["beta_0"], x, S)
-        domain = (diffusion_config["beta_0"], 0.99)
+        # g = lambda x: np.linspace(diffusion_config["beta_0"], x, S)
+        # domain = (diffusion_config["beta_0"], 0.99)
+        g = lambda x: np.array([diffusion_config["beta_0"] * (1 + i * x) for i in range(S)])
+        domain = (0.0, 0.95 / diffusion_config["beta_0"] / S)
     elif schedule == 'quadratic':
         g = lambda x: np.array([diffusion_config["beta_0"] * (1+i*x) ** 2 for i in range(S)])
         domain = (0.0, 0.95 / np.sqrt(diffusion_config["beta_0"]) / S)
@@ -128,6 +130,8 @@ def get_VAR_noise(S, schedule='linear'):
 
     f = lambda x: np.prod(1 - g(x))
     largest_var = bisearch(f, domain, target, eps=1e-4)
+    print(f'target: {target}')
+    print(f'f(x): {f(largest_var)}')
     return g(largest_var)
 
 
@@ -324,6 +328,7 @@ def VAR_sampling(net, size, diffusion_hyperparams, user_defined_eta, kappa, cont
             else:
                 alpha_next = Gamma_bar[T_user-1-i - 1]
                 sigma = kappa * torch.sqrt((1-alpha_next) / (1-Gamma_bar[T_user-1-i]) * (1 - Gamma_bar[T_user-1-i] / alpha_next))
+            # kappa = 1 is DDPM, kappa = 0 is DDIM
             x *= torch.sqrt(alpha_next / Gamma_bar[T_user-1-i])
             c = torch.sqrt(1 - alpha_next - sigma ** 2) - torch.sqrt(1 - Gamma_bar[T_user-1-i]) * torch.sqrt(alpha_next / Gamma_bar[T_user-1-i])
             x += c * epsilon_theta + sigma * std_normal(size)
@@ -361,7 +366,7 @@ def generate(output_name, model_path, model_config,
     # map diffusion hyperparameters to gpu
     diffusion_hyperparams = calc_diffusion_hyperparams(**diffusion_config)
     for key in diffusion_hyperparams:
-        if key is not "T":
+        if key != "T":
             diffusion_hyperparams[key] = map_gpu(diffusion_hyperparams[key])
 
     # predefine model
